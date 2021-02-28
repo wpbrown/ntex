@@ -8,7 +8,7 @@ use crate::codec::{AsyncRead, AsyncWrite};
 use crate::framed::State;
 
 const LW: usize = 1024;
-const HW: usize = 8 * 1024;
+const HW: usize = 128 * 1024;
 
 /// Read io task
 pub struct ReadTask<T>
