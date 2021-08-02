@@ -390,7 +390,7 @@ where
         let mut succ = false;
         let mut sockets = Vec::new();
         for addr in addr.to_socket_addrs()? {
-            match crate::server::create_tcp_listener(addr, self.backlog) {
+            match crate::server::create_tcp_listener(addr, self.backlog, None) {
                 Ok(lst) => {
                     succ = true;
                     sockets.push(lst);

@@ -34,6 +34,7 @@ pub struct ServerBuilder {
     cmd: UnboundedReceiver<ServerCommand>,
     server: Server,
     notify: Vec<oneshot::Sender<()>>,
+    v6_only: Option<bool>,
 }
 
 impl Default for ServerBuilder {
@@ -62,6 +63,7 @@ impl ServerBuilder {
             cmd: rx,
             notify: Vec::new(),
             server,
+            v6_only: None,
         }
     }
 
@@ -71,6 +73,12 @@ impl ServerBuilder {
     /// count.
     pub fn workers(mut self, num: usize) -> Self {
         self.threads = num;
+        self
+    }
+
+    /// todo
+    pub fn v6_only(mut self, enable: bool) -> Self {
+        self.v6_only = Some(enable);
         self
     }
 
@@ -149,7 +157,7 @@ impl ServerBuilder {
     where
         F: Fn(&mut ServiceConfig) -> io::Result<()>,
     {
-        let mut cfg = ServiceConfig::new(self.threads, self.backlog);
+        let mut cfg = ServiceConfig::new(self.threads, self.backlog, self.v6_only);
 
         f(&mut cfg)?;
 
@@ -178,7 +186,7 @@ impl ServerBuilder {
         F: StreamServiceFactory<TcpStream>,
         U: net::ToSocketAddrs,
     {
-        let sockets = bind_addr(addr, self.backlog)?;
+        let sockets = bind_addr(addr, self.backlog, self.v6_only)?;
 
         for lst in sockets {
             let token = self.token.next();
@@ -463,12 +471,13 @@ impl Future for ServerBuilder {
 pub(super) fn bind_addr<S: net::ToSocketAddrs>(
     addr: S,
     backlog: i32,
+    v6_only: Option<bool>,
 ) -> io::Result<Vec<net::TcpListener>> {
     let mut err = None;
     let mut succ = false;
     let mut sockets = Vec::new();
     for addr in addr.to_socket_addrs()? {
-        match create_tcp_listener(addr, backlog) {
+        match create_tcp_listener(addr, backlog, v6_only) {
             Ok(lst) => {
                 succ = true;
                 sockets.push(lst);
@@ -494,10 +503,17 @@ pub(super) fn bind_addr<S: net::ToSocketAddrs>(
 pub(crate) fn create_tcp_listener(
     addr: net::SocketAddr,
     backlog: i32,
+    v6_only: Option<bool>,
 ) -> io::Result<net::TcpListener> {
     let builder = match addr {
         net::SocketAddr::V4(_) => Socket::new(Domain::IPV4, Type::STREAM, None)?,
-        net::SocketAddr::V6(_) => Socket::new(Domain::IPV6, Type::STREAM, None)?,
+        net::SocketAddr::V6(_) => {
+            let socket = Socket::new(Domain::IPV6, Type::STREAM, None)?;
+            if let Some(value) = v6_only {
+                socket.set_only_v6(value)?;
+            }
+            socket
+        }
     };
 
     // On Windows, this allows rebinding sockets which are actively in use,
@@ -564,6 +580,6 @@ mod tests {
     #[test]
     fn test_bind_addr() {
         let addrs: Vec<net::SocketAddr> = Vec::new();
-        assert!(bind_addr(&addrs[..], 10).is_err());
+        assert!(bind_addr(&addrs[..], 10, None).is_err());
     }
 }

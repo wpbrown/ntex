@@ -20,15 +20,17 @@ pub struct ServiceConfig {
     pub(super) apply: Option<Box<dyn ServiceRuntimeConfiguration + Send>>,
     pub(super) threads: usize,
     pub(super) backlog: i32,
+    pub(super) v6_only: Option<bool>,
 }
 
 impl ServiceConfig {
-    pub(super) fn new(threads: usize, backlog: i32) -> ServiceConfig {
+    pub(super) fn new(threads: usize, backlog: i32, v6_only: Option<bool>) -> ServiceConfig {
         ServiceConfig {
             threads,
             backlog,
             services: Vec::new(),
             apply: None,
+            v6_only,
         }
     }
 
@@ -37,7 +39,7 @@ impl ServiceConfig {
     where
         U: net::ToSocketAddrs,
     {
-        let sockets = bind_addr(addr, self.backlog)?;
+        let sockets = bind_addr(addr, self.backlog, self.v6_only)?;
 
         for lst in sockets {
             self.listen(name.as_ref(), lst);
